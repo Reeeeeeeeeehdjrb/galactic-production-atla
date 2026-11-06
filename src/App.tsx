@@ -120,7 +120,7 @@ export default function App() {
     if(!node)return <span className="muted">Missing resource</span>;
     if(node.cycle)return <span className="cycle">Circular dependency detected</span>;
     const r=node.resource as Resource;
-    return <div className="chain-node" style={{marginLeft:depth*15}}><button className="chain-link" onClick={()=>focusResource(r)}>{r.name}</button><span className="tag">{r.kind}</span>{node.children.length>0&&<div className="chain-children">{node.children.map((c:any,i)=><div key={i}><span className="qty">×{c.quantity}</span>{renderChain(c.node,depth+1)}</div>)}</div>}</div>;
+    return <div className="chain-node" key={node.id}><div className="chain-card"><strong>{node.name}</strong><span>{node.output}</span></div>{node.children.length > 0 && <div className="chain-children">{node.children.map((c: any, i: number) => <div key={i}>{renderChain(c, visited)}</div>)}</div>}</div>;
   };
 
   return <div className="app-shell">
