@@ -112,22 +112,29 @@ export default function App() {
   };
   const chain=(id:string,seen=new Set<string>()):any=>{
     if(seen.has(id))return {cycle:true,id};
-    const r=resources.find(x=>x.id===id);if(!r)return null;
-    const next=new Set(seen);next.add(id);
-    return {resource:r,children:r.ingredients.map(i=>({quantity:i.quantity,node:chain(i.resourceId,next)}))};
-  };
-  const renderChain=(node:any,depth=0):React.ReactNode=>{
-    if(!node)return <span className="muted">Missing resource</span>;
-    if(node.cycle)return <span className="cycle">Circular dependency detected</span>;
-    const r=node.resource as Resource;
-    return <div className="chain-node" key={node.id}><div className="chain-card"><strong>{node.name}</strong><span>{node.output}</span></div>{node.children.length > 0 && <div className="chain-children">{node.children.map((c: any, i: number) => <div key={i}>{renderChain(c, visited)}</div>)}</div>}</div>;
-  };
+    const renderChain = (node: any, depth = 0): React.ReactNode => {
+  if (!node) return <span className="muted">Missing resource</span>;
+  if (node.cycle) return <span className="cycle">Circular dependency detected</span>;
 
-  return <div className="app-shell">
-    <header className="topbar">
-      <div className="brand"><div className="brand-mark">✦</div><div><div className="brand-title">PRODUCTION ATLAS</div><div className="brand-sub">GALACTIC INDUSTRIAL DATABASE</div></div></div>
-      <div className="search-wrap"><span className="search-icon">⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search recipes, components, materials..." aria-label="Search resources"/>{query&&<button className="clear-search" onClick={()=>setQuery("")}>×</button>}
-        {query&&<div className="search-results">{results.length?results.map(r=><button key={r.id} onClick={()=>focusResource(r)}><span>{r.name}</span><small>{r.factory} · {r.kind}</small></button>):<div className="no-results">No matching resources</div>}</div>}
+  const r = node.resource as Resource;
+
+  return (
+    <div className="chain-node" key={r.id}>
+      <div className="chain-card">
+        <strong>{r.name}</strong>
+        <span>{r.output}</span>
+      </div>
+      {node.children.length > 0 && (
+        <div className="chain-children">
+          {node.children.map((c: any, i: number) => (
+            <div key={i}>{renderChain(c, depth + 1)}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+    {query&&<div className="search-results">{results.length?results.map(r=><button key={r.id} onClick={()=>focusResource(r)}><span>{r.name}</span><small>{r.factory} · {r.kind}</small></button>):<div className="no-results">No matching resources</div>}</div>}
       </div>
       <div className="top-actions"><button className="quiet-btn" onClick={()=>fit()}>Fit map</button><button className="quiet-btn" onClick={()=>{setScale(1);setOffset({x:0,y:0});}}>Reset</button><button className={`admin-btn ${admin?"active":""}`} onClick={()=>{setAdmin(!admin);setPanel("admin");}}>{admin?"Admin mode on":"Admin tools"}</button></div>
     </header>
