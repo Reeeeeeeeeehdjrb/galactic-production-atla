@@ -626,7 +626,7 @@ function App() {
                     <span
                       className={`kind-dot kind-${resource.kind
                         .toLowerCase()
-                        .replaceAll(" ", "-")}`}
+                        .replace(/ /g, "-")}`}
                     />
 
                     <span>
@@ -946,7 +946,7 @@ function App() {
                 <div
                   className={`resource-emblem kind-${selected.kind
                     .toLowerCase()
-                    .replaceAll(" ", "-")}`}
+                    .replace(/ /g, "-")}`}
                 >
                   {selected.kind === "Raw material"
                     ? "◈"
