@@ -165,6 +165,7 @@ function App() {
 
   const [placingHotspot, setPlacingHotspot] = useState(false);
   const [notice, setNotice] = useState("");
+  const [mapImageFailed, setMapImageFailed] = useState(false);
   const [showZoneTools, setShowZoneTools] = useState(false);
   const [zones, setZones] = useState<Zone[]>(() => {
     try { return JSON.parse(localStorage.getItem("galactic-production-atlas-zones-v1") || "[]"); }
@@ -212,14 +213,14 @@ function App() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if (event.altKey && event.key.toLowerCase() === "k") {
+      if (event.altKey && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
         event.preventDefault();
         setAdminMode((value) => !value);
         setPlacingHotspot(false);
       }
     };
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
+    document.addEventListener("keydown", handleShortcut);
+    return () => document.removeEventListener("keydown", handleShortcut);
   }, []);
 
   useEffect(() => {
@@ -607,20 +608,6 @@ function App() {
 
   return (
     <main className="atlas-app">
-      <header className="atlas-header">
-        <div className="brand-block">
-          <div className="brand-mark">G</div>
-
-          <div>
-            <div className="brand-title">
-              GALACTIC PRODUCTION ATLAS
-            </div>
-
-            <div className="brand-subtitle">
-              INDUSTRIAL NETWORK • RESOURCE INTELLIGENCE
-            </div>
-          </div>
-        </div>
 
         <div className="header-search">
           <span className="search-symbol">⌕</span>
@@ -686,7 +673,6 @@ function App() {
         </div>
 
 
-      </header>
 
       <div className="atlas-layout">
         <aside className="factory-rail">
@@ -819,12 +805,11 @@ function App() {
                 src="/production-map.png"
                 alt="Galactic manufacturing production blueprint"
                 draggable={false}
-                onError={(event) => {
-                  event.currentTarget.style.opacity = "0";
-                }}
+                onLoad={() => setMapImageFailed(false)}
+                onError={() => setMapImageFailed(true)}
               />
 
-              <div className="map-image-fallback">
+              {mapImageFailed && <div className="map-image-fallback">
                 <div className="fallback-grid" />
 
                 <div className="fallback-message">
@@ -849,7 +834,7 @@ function App() {
                     {factory}
                   </div>
                 ))}
-              </div>
+              </div>}
 
               {zones.map((zone) => <div key={zone.id} className="blueprint-zone" onClick={(event) => event.stopPropagation()} onPointerMove={moveZonePointer} onPointerUp={stopZonePointer} onPointerCancel={stopZonePointer} style={{ left: `${zone.x}%`, top: `${zone.y}%`, width: `${zone.width}%`, height: `${zone.height}%` }}>
                 <span className="zone-drag-label" onPointerDown={(event) => startZonePointer(event, zone, "move")}>{zone.name}</span>
