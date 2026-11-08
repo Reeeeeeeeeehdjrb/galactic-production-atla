@@ -13,6 +13,8 @@ type Ingredient = {
 };
 
 type Zone = { id: string; x: number; y: number; width: number; height: number };
+type Hotspot = { id: string; resourceId: string; x: number; y: number; zoneId: string | null };
+type RenderHotspot = { id: string; resourceId: string; x: number; y: number; count: number };
 
 type Resource = {
   id: string;
@@ -142,6 +144,26 @@ function readSavedResources(): Resource[] {
   }
 }
 
+function readSavedHotspots(): Hotspot[] {
+  try {
+    const saved = localStorage.getItem("galactic-production-atlas-hotspots-v2");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch { /* recover from the legacy resource coordinates below */ }
+
+  return readSavedResources()
+    .filter(resource => typeof resource.x === "number" && typeof resource.y === "number")
+    .map((resource, index) => ({
+      id: `legacy-${resource.id}-${index}`,
+      resourceId: resource.id,
+      x: resource.x as number,
+      y: resource.y as number,
+      zoneId: null,
+    }));
+}
+
 function App() {
   const [resources, setResources] =
     useState<Resource[]>(readSavedResources);
@@ -163,6 +185,8 @@ function App() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
 
   const [placingHotspot, setPlacingHotspot] = useState(false);
+  const [hotspots, setHotspots] = useState<Hotspot[]>(readSavedHotspots);
+  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [showZoneTools, setShowZoneTools] = useState(false);
   const [drawingZone, setDrawingZone] = useState(false);
   const [zones, setZones] = useState<Zone[]>(() => {
@@ -201,6 +225,30 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem("galactic-production-atlas-zones-v1", JSON.stringify(zones)); }
     catch { setNotice("Could not save placement areas."); }
+  }, [zones]);
+
+  useEffect(() => {
+    try { localStorage.setItem("galactic-production-atlas-hotspots-v2", JSON.stringify(hotspots)); }
+    catch { setNotice("Could not save map hotspots."); }
+  }, [hotspots]);
+
+  // Areas are real map groups: hotspots inside an area are assigned to it automatically.
+  useEffect(() => {
+    const usableZones = zones.filter(zone => zone.id !== "draft");
+    setHotspots(current => {
+      let changed = false;
+      const next = current.map(hotspot => {
+        const containing = usableZones
+          .filter(zone => hotspot.x >= zone.x && hotspot.x <= zone.x + zone.width && hotspot.y >= zone.y && hotspot.y <= zone.y + zone.height)
+          .sort((a, b) => a.width * a.height - b.width * b.height)[0];
+        const zoneId = containing?.id ?? null;
+        if (hotspot.zoneId === zoneId) return hotspot;
+        changed = true;
+        return { ...hotspot, zoneId };
+      });
+      return changed ? next : current;
+    });
+    if (activeZoneId && !usableZones.some(zone => zone.id === activeZoneId)) setActiveZoneId(null);
   }, [zones]);
 
   useEffect(() => {
@@ -292,6 +340,35 @@ function App() {
         .includes(term);
     });
   }, [resources, query, activeFactory, resourceById]);
+
+  // At overview zoom, cluster nearby markers into one lightweight counter.
+  // Individual hotspots and labels only mount once the user zooms in.
+  const renderHotspots = useMemo<RenderHotspot[]>(() => {
+    const allowedIds = new Set(filteredResources.map(resource => resource.id));
+    const visible = hotspots.filter(hotspot => {
+      if (!allowedIds.has(hotspot.resourceId)) return false;
+      if (activeZoneId && hotspot.zoneId !== activeZoneId) return false;
+      return true;
+    });
+
+    if (zoom >= 1.45) return visible.map(hotspot => ({ ...hotspot, count: 1 }));
+
+    const clusters = new Map<string, RenderHotspot & { totalX: number; totalY: number }>();
+    visible.forEach(hotspot => {
+      const key = `${Math.floor(hotspot.x / 5)}:${Math.floor(hotspot.y / 5)}`;
+      const current = clusters.get(key);
+      if (current) {
+        current.count += 1;
+        current.totalX += hotspot.x;
+        current.totalY += hotspot.y;
+      } else {
+        clusters.set(key, { id: `cluster-${key}`, resourceId: hotspot.resourceId, x: hotspot.x, y: hotspot.y, count: 1, totalX: hotspot.x, totalY: hotspot.y });
+      }
+    });
+    return Array.from(clusters.values()).map(cluster => ({ id: cluster.id, resourceId: cluster.resourceId, x: cluster.totalX / cluster.count, y: cluster.totalY / cluster.count, count: cluster.count }));
+  }, [hotspots, resourceById, activeZoneId, query, filteredResources, zoom]);
+
+  const zoneHotspotCount = (zoneId: string) => hotspots.filter(hotspot => hotspot.zoneId === zoneId).length;
 
   // Recursively trace all ingredients needed to produce a resource.
   const getAncestors = useCallback(
@@ -490,6 +567,7 @@ function App() {
         }))
     );
 
+    setHotspots(current => current.filter(hotspot => hotspot.resourceId !== resource.id));
     setSelectedId(null);
     setNotice("Resource deleted.");
   };
@@ -511,9 +589,18 @@ function App() {
   const handleMapClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!placingHotspot || !selected) return;
     const point = getMapPoint(event.clientX, event.clientY);
-    setResources(current => current.map(resource => resource.id === selected.id ? { ...resource, x: point.x, y: point.y } : resource));
+    const containing = zones
+      .filter(zone => zone.id !== "draft" && point.x >= zone.x && point.x <= zone.x + zone.width && point.y >= zone.y && point.y <= zone.y + zone.height)
+      .sort((a, b) => a.width * a.height - b.width * b.height)[0];
+    setHotspots(current => [...current, {
+      id: `hotspot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      resourceId: selected.id,
+      x: point.x,
+      y: point.y,
+      zoneId: containing?.id ?? null,
+    }]);
     setPlacingHotspot(false);
-    setNotice(`Map location set for ${selected.name}.`);
+    setNotice(`Hotspot added for ${selected.name}. You can add another one whenever you want.`);
   };
 
   const clampPan = (next: { x: number; y: number }, nextZoom = zoom) => {
@@ -847,8 +934,8 @@ function App() {
           {adminMode && (
             <div className="admin-banner">
               <strong>ADMIN MODE · ALT + K TO EXIT</strong>
-              <span>{selected ? `Selected: ${selected.name}` : "Select a resource, then place its hotspot."}</span>
-              {selected && !placingHotspot && <button onClick={() => setPlacingHotspot(true)}>PLACE HOTSPOT</button>}
+              <span>{selected ? `Selected: ${selected.name} · add as many map locations as needed.` : "Select a resource, then add one or more hotspots."}</span>
+              {selected && !placingHotspot && <button onClick={() => setPlacingHotspot(true)}>＋ ADD HOTSPOT</button>}
               {placingHotspot && <button onClick={() => setPlacingHotspot(false)}>CANCEL</button>}
             </div>
           )}
@@ -874,12 +961,16 @@ function App() {
               <img
                 ref={imageRef}
                 className="production-map-image"
-                src="/production-map.png"
+                src={zoom >= 1.45 ? "/production-map-detail.png" : "/production-map.png"}
                 alt="Galactic manufacturing production blueprint"
                 draggable={false}
                 onLoad={(event) => setMapSize({ width: event.currentTarget.naturalWidth || 1600, height: event.currentTarget.naturalHeight || 1000 })}
                 onError={(event) => {
-                  event.currentTarget.style.opacity = "0";
+                  if (event.currentTarget.src.includes("production-map-detail.png")) {
+                    event.currentTarget.src = "/production-map.png";
+                  } else {
+                    event.currentTarget.style.opacity = "0";
+                  }
                 }}
               />
 
@@ -913,62 +1004,72 @@ function App() {
               {zones.map(zone => (
                 <div
                   key={zone.id}
-                  className={`placement-zone ${zone.id === "draft" ? "draft" : ""}`}
+                  className={`placement-zone ${zone.id === "draft" ? "draft" : ""} ${activeZoneId === zone.id ? "selected" : ""}`}
                   style={{ left: `${zone.x}%`, top: `${zone.y}%`, width: `${zone.width}%`, height: `${zone.height}%` }}
                   onPointerDown={event => startZoneAdjust(event, zone, "move")}
-                  title="Drag to move this placement area"
+                  onClick={event => {
+                    event.stopPropagation();
+                    if (adminMode) return;
+                    setActiveZoneId(current => current === zone.id ? null : zone.id);
+                    setNotice(activeZoneId === zone.id ? "Showing all map hotspots." : `Showing ${zoneHotspotCount(zone.id)} hotspots in this area.`);
+                  }}
+                  title={`${zoneHotspotCount(zone.id)} hotspots · click to filter by area`}
                 >
+                  {zone.id !== "draft" && <span className="zone-label">AREA · {zoneHotspotCount(zone.id)}</span>}
                   {adminMode && zone.id !== "draft" && <button className="zone-delete" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setZones(current => current.filter(item => item.id !== zone.id)); }}>×</button>}
                   {adminMode && zone.id !== "draft" && <span className="zone-resize" onPointerDown={event => startZoneAdjust(event, zone, "resize")} />}
                 </div>
               ))}
 
-              {resources
-                .filter(
-                  (resource) =>
-                    typeof resource.x === "number" &&
-                    typeof resource.y === "number"
-                )
-                .filter(
-                  (resource) =>
-                    activeFactory === "All factories" ||
-                    resource.factory === activeFactory
-                )
-                .map((resource) => (
-                  <button
-                    key={resource.id}
-                    className={`hotspot ${
-                      selectedId === resource.id
-                        ? "active"
-                        : ""
-                    }`}
-                    style={{
-                      left: `${resource.x}%`,
-                      top: `${resource.y}%`,
-                    }}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      chooseResource(resource);
-                    }}
-                    title={resource.name}
-                  >
-                    <span className="hotspot-pulse" />
-                    <span className="hotspot-label">
-                      {resource.name}
-                    </span>
-                  </button>
-                ))}
+              {renderHotspots.map((marker) => {
+                const resource = resourceById.get(marker.resourceId);
+                if (!resource) return null;
+                const isCluster = zoom < 1.45 || marker.count > 1;
+                return (
+                  <div className="hotspot-wrap" key={marker.id} style={{ left: `${marker.x}%`, top: `${marker.y}%` }}>
+                    <button
+                      className={`hotspot ${selectedId === resource.id ? "active" : ""} ${isCluster ? "cluster-hotspot" : ""}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (isCluster) {
+                          setZoom(current => Math.min(4, Math.max(1.55, current * 1.65)));
+                          setNotice(`${marker.count} nearby hotspots. Zoom in to separate them.`);
+                        } else {
+                          chooseResource(resource);
+                        }
+                      }}
+                      title={isCluster ? `${marker.count} nearby hotspots — click to zoom in` : resource.name}
+                    >
+                      <span className="hotspot-pulse" />
+                      {marker.count > 1 ? <span className="hotspot-count">{marker.count}</span> : (!isCluster && <span className="hotspot-label">{resource.name}</span>)}
+                    </button>
+                    {adminMode && !isCluster && (
+                      <button
+                        className="hotspot-remove"
+                        title="Remove this hotspot"
+                        onClick={(event) => { event.stopPropagation(); setHotspots(current => current.filter(item => item.id !== marker.id)); }}
+                      >×</button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+
+            {activeZoneId && !adminMode && (
+              <button className="active-area-filter" onClick={() => setActiveZoneId(null)}>
+                AREA FILTER ACTIVE · SHOW ALL HOTSPOTS ×
+              </button>
+            )}
 
             {adminMode && (
               <div className="zone-tools-wrap">
-                <button className="zone-tools-toggle" onClick={() => setShowZoneTools(value => !value)} title="Placement area tools">▧ AREAS</button>
+                <button className="zone-tools-toggle" onClick={() => setShowZoneTools(value => !value)} title="Placement area tools">▧ AREAS{zones.length ? ` · ${zones.length}` : ""}</button>
                 {showZoneTools && (
                   <div className="zone-tools-panel">
                     <strong>PLACEMENT AREAS</strong>
-                    <p>Draw a rectangle on the blueprint. Drag it to move; use its corner to resize.</p>
+                    <p>Areas group hotspots automatically. Click an area outside admin mode to show only its hotspots. Drag to move; use the corner to resize.</p>
                     <button onClick={() => { setDrawingZone(true); setPlacingHotspot(false); setShowZoneTools(false); }}>＋ DRAW AREA</button>
-                    <button onClick={() => setZones([])}>CLEAR ALL AREAS</button>
+                    <button onClick={() => { setActiveZoneId(null); setZones([]); }}>CLEAR ALL AREAS</button>
                   </div>
                 )}
               </div>
@@ -1353,7 +1454,7 @@ function App() {
               <button
                 onClick={() => {
                   const blob = new Blob(
-                    [JSON.stringify(resources, null, 2)],
+                    [JSON.stringify({ version: 2, resources, hotspots, zones }, null, 2)],
                     { type: "application/json" }
                   );
 
@@ -1392,15 +1493,22 @@ function App() {
                           String(reader.result)
                         );
 
-                        if (!Array.isArray(imported)) {
-                          throw new Error(
-                            "Expected an array"
-                          );
+                        if (Array.isArray(imported)) {
+                          setResources(imported);
+                          setHotspots(imported
+                            .filter((resource: Resource) => typeof resource.x === "number" && typeof resource.y === "number")
+                            .map((resource: Resource, index: number) => ({ id: `import-${resource.id}-${index}`, resourceId: resource.id, x: resource.x as number, y: resource.y as number, zoneId: null })));
+                          setZones([]);
+                        } else if (imported && Array.isArray(imported.resources)) {
+                          setResources(imported.resources);
+                          setHotspots(Array.isArray(imported.hotspots) ? imported.hotspots : []);
+                          setZones(Array.isArray(imported.zones) ? imported.zones : []);
+                        } else {
+                          throw new Error("Unsupported database format");
                         }
-
-                        setResources(imported);
+                        setActiveZoneId(null);
                         setSelectedId(null);
-                        setNotice("Database imported.");
+                        setNotice("Database, hotspots, and areas imported.");
                       } catch {
                         setNotice(
                           "Invalid database file."
