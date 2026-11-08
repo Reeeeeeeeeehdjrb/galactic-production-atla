@@ -13,8 +13,8 @@ type Ingredient = {
 };
 
 type Zone = { id: string; x: number; y: number; width: number; height: number };
-type Hotspot = { id: string; resourceId: string; x: number; y: number; zoneId: string | null };
-type RenderHotspot = { id: string; resourceId: string; x: number; y: number; count: number };
+type Hotspot = { id: string; resourceId: string; x: number; y: number; width: number; height: number; zoneId: string | null };
+type RenderHotspot = { id: string; resourceId: string; x: number; y: number; width: number; height: number; count: number };
 
 type Resource = {
   id: string;
@@ -149,7 +149,7 @@ function readSavedHotspots(): Hotspot[] {
     const saved = localStorage.getItem("galactic-production-atlas-hotspots-v2");
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.map((item: any) => ({ ...item, width: Number(item.width) || 4, height: Number(item.height) || 4 }));
     }
   } catch { /* recover from the legacy resource coordinates below */ }
 
@@ -160,6 +160,8 @@ function readSavedHotspots(): Hotspot[] {
       resourceId: resource.id,
       x: resource.x as number,
       y: resource.y as number,
+      width: 4,
+      height: 4,
       zoneId: null,
     }));
 }
@@ -202,6 +204,7 @@ function App() {
   const imageRef = useRef<HTMLImageElement>(null);
   const drawingRef = useRef<{ x: number; y: number } | null>(null);
   const zoneDragRef = useRef<{ id: string; mode: "move" | "resize"; startX: number; startY: number; zone: Zone } | null>(null);
+  const hotspotDragRef = useRef<{ id: string; mode: "move" | "resize"; startX: number; startY: number; hotspot: Hotspot } | null>(null);
   const draftZoneRef = useRef<Zone | null>(null);
 
   const dragRef = useRef<{
@@ -351,7 +354,7 @@ function App() {
       return true;
     });
 
-    if (zoom >= 1.45) return visible.map(hotspot => ({ ...hotspot, count: 1 }));
+    if (adminMode || zoom >= 1.45) return visible.map(hotspot => ({ ...hotspot, count: 1 }));
 
     const clusters = new Map<string, RenderHotspot & { totalX: number; totalY: number }>();
     visible.forEach(hotspot => {
@@ -362,11 +365,11 @@ function App() {
         current.totalX += hotspot.x;
         current.totalY += hotspot.y;
       } else {
-        clusters.set(key, { id: `cluster-${key}`, resourceId: hotspot.resourceId, x: hotspot.x, y: hotspot.y, count: 1, totalX: hotspot.x, totalY: hotspot.y });
+        clusters.set(key, { id: `cluster-${key}`, resourceId: hotspot.resourceId, x: hotspot.x, y: hotspot.y, width: 4, height: 4, count: 1, totalX: hotspot.x, totalY: hotspot.y });
       }
     });
-    return Array.from(clusters.values()).map(cluster => ({ id: cluster.id, resourceId: cluster.resourceId, x: cluster.totalX / cluster.count, y: cluster.totalY / cluster.count, count: cluster.count }));
-  }, [hotspots, resourceById, activeZoneId, query, filteredResources, zoom]);
+    return Array.from(clusters.values()).map(cluster => ({ id: cluster.id, resourceId: cluster.resourceId, x: cluster.totalX / cluster.count, y: cluster.totalY / cluster.count, width: 4, height: 4, count: cluster.count }));
+  }, [hotspots, resourceById, activeZoneId, query, filteredResources, zoom, adminMode]);
 
   const zoneHotspotCount = (zoneId: string) => hotspots.filter(hotspot => hotspot.zoneId === zoneId).length;
 
@@ -597,6 +600,8 @@ function App() {
       resourceId: selected.id,
       x: point.x,
       y: point.y,
+      width: 4,
+      height: 4,
       zoneId: containing?.id ?? null,
     }]);
     setPlacingHotspot(false);
@@ -638,6 +643,19 @@ function App() {
   };
 
   const updateZonePointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (hotspotDragRef.current) {
+      const drag = hotspotDragRef.current;
+      const point = getMapPoint(event.clientX, event.clientY);
+      const dx = point.x - drag.startX;
+      const dy = point.y - drag.startY;
+      setHotspots(current => current.map(item => {
+        if (item.id !== drag.id) return item;
+        if (drag.mode === "move") return { ...item, x: Math.max(item.width / 2, Math.min(100 - item.width / 2, drag.hotspot.x + dx)), y: Math.max(item.height / 2, Math.min(100 - item.height / 2, drag.hotspot.y + dy)) };
+        const size = Math.max(1, Math.min(30, Math.max(drag.hotspot.width + dx, drag.hotspot.height + dy)));
+        return { ...item, width: size, height: size };
+      }));
+      return;
+    }
     if (drawingRef.current) {
       const point = getMapPoint(event.clientX, event.clientY);
       const start = drawingRef.current;
@@ -673,7 +691,17 @@ function App() {
       }
     }
     zoneDragRef.current = null;
+    hotspotDragRef.current = null;
     dragRef.current = null;
+  };
+
+  const startHotspotAdjust = (event: React.PointerEvent, hotspot: Hotspot, mode: "move" | "resize") => {
+    if (!adminMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getMapPoint(event.clientX, event.clientY);
+    hotspotDragRef.current = { id: hotspot.id, mode, startX: point.x, startY: point.y, hotspot: { ...hotspot } };
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
   };
 
   const startZoneAdjust = (event: React.PointerEvent, zone: Zone, mode: "move" | "resize") => {
@@ -690,7 +718,7 @@ function App() {
   ) => {
     if (
       placingHotspot || drawingZone || zoneDragRef.current ||
-      (event.target as HTMLElement).closest(".hotspot, .placement-zone, .zone-tools-wrap, .map-legend, .admin-banner")
+      (event.target as HTMLElement).closest(".hotspot-region, .hotspot, .placement-zone, .zone-tools-wrap, .map-legend, .admin-banner")
     ) {
       return;
     }
@@ -1024,32 +1052,30 @@ function App() {
               {renderHotspots.map((marker) => {
                 const resource = resourceById.get(marker.resourceId);
                 if (!resource) return null;
-                const isCluster = zoom < 1.45 || marker.count > 1;
+                const isCluster = !adminMode && (zoom < 1.45 || marker.count > 1);
+                const hotspot = hotspots.find(item => item.id === marker.id);
+                if (adminMode && !hotspot) return null;
                 return (
-                  <div className="hotspot-wrap" key={marker.id} style={{ left: `${marker.x}%`, top: `${marker.y}%` }}>
-                    <button
-                      className={`hotspot ${selectedId === resource.id ? "active" : ""} ${isCluster ? "cluster-hotspot" : ""}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (isCluster) {
-                          setZoom(current => Math.min(4, Math.max(1.55, current * 1.65)));
-                          setNotice(`${marker.count} nearby hotspots. Zoom in to separate them.`);
-                        } else {
-                          chooseResource(resource);
-                        }
-                      }}
-                      title={isCluster ? `${marker.count} nearby hotspots — click to zoom in` : resource.name}
-                    >
-                      <span className="hotspot-pulse" />
-                      {marker.count > 1 ? <span className="hotspot-count">{marker.count}</span> : (!isCluster && <span className="hotspot-label">{resource.name}</span>)}
-                    </button>
-                    {adminMode && !isCluster && (
-                      <button
-                        className="hotspot-remove"
-                        title="Remove this hotspot"
-                        onClick={(event) => { event.stopPropagation(); setHotspots(current => current.filter(item => item.id !== marker.id)); }}
-                      >×</button>
-                    )}
+                  <div
+                    className={`hotspot-region ${adminMode ? "editing" : ""} ${selectedId === resource.id ? "active" : ""}`}
+                    key={marker.id}
+                    style={{ left: `${marker.x}%`, top: `${marker.y}%`, width: adminMode ? `${marker.width}%` : `${Math.max(marker.width, 4)}%`, height: adminMode ? `${marker.height}%` : `${Math.max(marker.height, 4)}%` }}
+                    onPointerDown={event => adminMode && hotspot && startHotspotAdjust(event, hotspot, "move")}
+                    onClick={event => {
+                      event.stopPropagation();
+                      if (adminMode) return;
+                      if (isCluster) {
+                        setZoom(current => Math.min(4, Math.max(1.55, current * 1.65)));
+                        setNotice(`${marker.count} nearby hotspots. Zoom in to separate them.`);
+                      } else {
+                        chooseResource(resource);
+                      }
+                    }}
+                    title={adminMode ? `${resource.name} · drag to move · resize from corner` : (isCluster ? `${marker.count} nearby hotspots — click to zoom in` : resource.name)}
+                  >
+                    {adminMode && <span className="hotspot-region-name">{resource.name}</span>}
+                    {adminMode && hotspot && <span className="hotspot-region-resize" onPointerDown={event => startHotspotAdjust(event, hotspot, "resize")} />}
+                    {adminMode && hotspot && <button className="hotspot-region-delete" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setHotspots(current => current.filter(item => item.id !== hotspot.id)); }}>×</button>}
                   </div>
                 );
               })}
@@ -1497,11 +1523,11 @@ function App() {
                           setResources(imported);
                           setHotspots(imported
                             .filter((resource: Resource) => typeof resource.x === "number" && typeof resource.y === "number")
-                            .map((resource: Resource, index: number) => ({ id: `import-${resource.id}-${index}`, resourceId: resource.id, x: resource.x as number, y: resource.y as number, zoneId: null })));
+                            .map((resource: Resource, index: number) => ({ id: `import-${resource.id}-${index}`, resourceId: resource.id, x: resource.x as number, y: resource.y as number, width: 4, height: 4, zoneId: null })));
                           setZones([]);
                         } else if (imported && Array.isArray(imported.resources)) {
                           setResources(imported.resources);
-                          setHotspots(Array.isArray(imported.hotspots) ? imported.hotspots : []);
+                          setHotspots(Array.isArray(imported.hotspots) ? imported.hotspots.map((item: any) => ({ ...item, width: Number(item.width) || 4, height: Number(item.height) || 4 })) : []);
                           setZones(Array.isArray(imported.zones) ? imported.zones : []);
                         } else {
                           throw new Error("Unsupported database format");
