@@ -12,8 +12,7 @@ type Ingredient = {
   quantity: number;
 };
 
-type Zone = { id: string; name: string; x: number; y: number; width: number; height: number; };
-type ZonePointer = { id: string; mode: "move" | "resize"; pointerX: number; pointerY: number; x: number; y: number; width: number; height: number; } | null;
+type Zone = { id: string; x: number; y: number; width: number; height: number };
 
 type Resource = {
   id: string;
@@ -164,16 +163,22 @@ function App() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
 
   const [placingHotspot, setPlacingHotspot] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [mapImageFailed, setMapImageFailed] = useState(false);
   const [showZoneTools, setShowZoneTools] = useState(false);
+  const [drawingZone, setDrawingZone] = useState(false);
   const [zones, setZones] = useState<Zone[]>(() => {
     try { return JSON.parse(localStorage.getItem("galactic-production-atlas-zones-v1") || "[]"); }
     catch { return []; }
   });
+  const [showFactoryRail, setShowFactoryRail] = useState(true);
+  const [showInfoPanel, setShowInfoPanel] = useState(true);
+  const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
+  const [notice, setNotice] = useState("");
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const zonePointerRef = useRef<ZonePointer>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const drawingRef = useRef<{ x: number; y: number } | null>(null);
+  const zoneDragRef = useRef<{ id: string; mode: "move" | "resize"; startX: number; startY: number; zone: Zone } | null>(null);
+  const draftZoneRef = useRef<Zone | null>(null);
 
   const dragRef = useRef<{
     x: number;
@@ -181,19 +186,6 @@ function App() {
     panX: number;
     panY: number;
   } | null>(null);
-
-  useEffect(() => {
-    const fitMinimumZoom = () => {
-      const viewport = viewportRef.current;
-      if (!viewport) return;
-      const minimum = Math.max(viewport.clientWidth / 1600, viewport.clientHeight / 1000);
-      setZoom((current) => Math.max(current, minimum));
-      setPan((current) => clampPan(current, Math.max(zoom, minimum)));
-    };
-    fitMinimumZoom();
-    window.addEventListener("resize", fitMinimumZoom);
-    return () => window.removeEventListener("resize", fitMinimumZoom);
-  }, []);
 
   useEffect(() => {
     try {
@@ -208,20 +200,28 @@ function App() {
 
   useEffect(() => {
     try { localStorage.setItem("galactic-production-atlas-zones-v1", JSON.stringify(zones)); }
-    catch { setNotice("Could not save zone layout in this browser."); }
+    catch { setNotice("Could not save placement areas."); }
   }, [zones]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if (event.altKey && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
+      if (event.altKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setAdminMode((value) => !value);
+        setAdminMode(value => !value);
         setPlacingHotspot(false);
+        setDrawingZone(false);
+        setShowZoneTools(false);
       }
     };
-    document.addEventListener("keydown", handleShortcut);
-    return () => document.removeEventListener("keydown", handleShortcut);
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
+
+  useEffect(() => {
+    const handleResize = () => setPan(current => clampPan(current));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [zoom, mapSize]);
 
   useEffect(() => {
     if (!notice) return;
@@ -494,27 +494,116 @@ function App() {
     setNotice("Resource deleted.");
   };
 
-  // Convert the click from viewport coordinates into blueprint coordinates.
+  const getMapPoint = (clientX: number, clientY: number) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return { x: 50, y: 50 };
+    const bounds = viewport.getBoundingClientRect();
+    const baseScale = Math.max(bounds.width / mapSize.width, bounds.height / mapSize.height);
+    const scale = baseScale * zoom;
+    const localX = clientX - bounds.left - bounds.width / 2 - pan.x;
+    const localY = clientY - bounds.top - bounds.height / 2 - pan.y;
+    return {
+      x: Math.max(0, Math.min(100, ((localX / scale + mapSize.width / 2) / mapSize.width) * 100)),
+      y: Math.max(0, Math.min(100, ((localY / scale + mapSize.height / 2) / mapSize.height) * 100)),
+    };
+  };
+
   const handleMapClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!placingHotspot || !selected || !viewportRef.current) return;
-    const bounds = viewportRef.current.getBoundingClientRect();
-    const mapWidth = 1600;
-    const mapHeight = 1000;
-    const imageX = (event.clientX - bounds.left - bounds.width / 2 - pan.x) / zoom + mapWidth / 2;
-    const imageY = (event.clientY - bounds.top - bounds.height / 2 - pan.y) / zoom + mapHeight / 2;
-    const x = Math.max(0, Math.min(100, imageX / mapWidth * 100));
-    const y = Math.max(0, Math.min(100, imageY / mapHeight * 100));
-    setResources((current) => current.map((resource) => resource.id === selected.id ? { ...resource, x, y } : resource));
+    if (!placingHotspot || !selected) return;
+    const point = getMapPoint(event.clientX, event.clientY);
+    setResources(current => current.map(resource => resource.id === selected.id ? { ...resource, x: point.x, y: point.y } : resource));
     setPlacingHotspot(false);
     setNotice(`Map location set for ${selected.name}.`);
+  };
+
+  const clampPan = (next: { x: number; y: number }, nextZoom = zoom) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return next;
+    const bounds = viewport.getBoundingClientRect();
+    const baseScale = Math.max(bounds.width / mapSize.width, bounds.height / mapSize.height);
+    const scale = baseScale * nextZoom;
+    const maxX = Math.max(0, (mapSize.width * scale - bounds.width) / 2);
+    const maxY = Math.max(0, (mapSize.height * scale - bounds.height) / 2);
+    return { x: Math.max(-maxX, Math.min(maxX, next.x)), y: Math.max(-maxY, Math.min(maxY, next.y)) };
+  };
+
+  const onWheelZoom = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const nextZoom = Math.max(1, Math.min(4, zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    if (nextZoom === zoom) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const cursor = { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 };
+    const ratio = nextZoom / zoom;
+    const nextPan = { x: cursor.x - (cursor.x - pan.x) * ratio, y: cursor.y - (cursor.y - pan.y) * ratio };
+    setPan(clampPan(nextPan, nextZoom));
+    setZoom(nextZoom);
+  };
+
+  const beginZoneDraw = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!drawingZone) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getMapPoint(event.clientX, event.clientY);
+    drawingRef.current = point;
+    draftZoneRef.current = { id: "draft", x: point.x, y: point.y, width: 0, height: 0 };
+    setZones(current => current.filter(zone => zone.id !== "draft"));
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const updateZonePointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (drawingRef.current) {
+      const point = getMapPoint(event.clientX, event.clientY);
+      const start = drawingRef.current;
+      const draft = { id: "draft", x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), width: Math.abs(point.x - start.x), height: Math.abs(point.y - start.y) };
+      draftZoneRef.current = draft;
+      setZones(current => [...current.filter(zone => zone.id !== "draft"), draft]);
+      return;
+    }
+    if (zoneDragRef.current) {
+      const drag = zoneDragRef.current;
+      const point = getMapPoint(event.clientX, event.clientY);
+      const dx = point.x - drag.startX;
+      const dy = point.y - drag.startY;
+      setZones(current => current.map(zone => {
+        if (zone.id !== drag.id) return zone;
+        if (drag.mode === "move") return { ...zone, x: Math.max(0, Math.min(100 - zone.width, drag.zone.x + dx)), y: Math.max(0, Math.min(100 - zone.height, drag.zone.y + dy)) };
+        return { ...zone, width: Math.max(1, Math.min(100 - drag.zone.x, drag.zone.width + dx)), height: Math.max(1, Math.min(100 - drag.zone.y, drag.zone.height + dy)) };
+      }));
+    }
+  };
+
+  const finishMapPointer = () => {
+    if (drawingRef.current) {
+      const draft = draftZoneRef.current;
+      drawingRef.current = null;
+      draftZoneRef.current = null;
+      setDrawingZone(false);
+      if (draft && draft.width > 1 && draft.height > 1) {
+        setZones(current => current.map(zone => zone.id === "draft" ? { ...draft, id: `area-${Date.now()}` } : zone));
+        setNotice("Placement area created. Drag it to move or use its corner to resize.");
+      } else {
+        setZones(current => current.filter(zone => zone.id !== "draft"));
+      }
+    }
+    zoneDragRef.current = null;
+    dragRef.current = null;
+  };
+
+  const startZoneAdjust = (event: React.PointerEvent, zone: Zone, mode: "move" | "resize") => {
+    if (!adminMode || drawingZone) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getMapPoint(event.clientX, event.clientY);
+    zoneDragRef.current = { id: zone.id, mode, startX: point.x, startY: point.y, zone: { ...zone } };
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
   };
 
   const startPan = (
     event: React.PointerEvent<HTMLDivElement>
   ) => {
     if (
-      placingHotspot ||
-      (event.target as HTMLElement).closest(".hotspot, .blueprint-zone")
+      placingHotspot || drawingZone || zoneDragRef.current ||
+      (event.target as HTMLElement).closest(".hotspot, .placement-zone, .zone-tools-wrap, .map-legend, .admin-banner")
     ) {
       return;
     }
@@ -542,56 +631,13 @@ function App() {
     }));
   };
 
-  const stopPan = () => {
-    dragRef.current = null;
-  };
-
-  const clampPan = (next: { x: number; y: number }, nextZoom = zoom) => {
-    const viewport = viewportRef.current;
-    if (!viewport) return next;
-    const minX = Math.max(0, (1600 * nextZoom - viewport.clientWidth) / 2);
-    const minY = Math.max(0, (1000 * nextZoom - viewport.clientHeight) / 2);
-    return {
-      x: Math.max(-minX, Math.min(minX, next.x)),
-      y: Math.max(-minY, Math.min(minY, next.y)),
-    };
-  };
-
   const zoomBy = (amount: number) => {
-    const viewport = viewportRef.current;
-    const minimum = viewport ? Math.max(viewport.clientWidth / 1600, viewport.clientHeight / 1000) : 0.5;
-    setZoom((current) => {
-      const nextZoom = Math.max(minimum, Math.min(2.8, Number((current + amount).toFixed(2))));
-      setPan((currentPan) => clampPan(currentPan, nextZoom));
-      return nextZoom;
+    setZoom(current => {
+      const next = Math.max(1, Math.min(4, Number((current + amount).toFixed(2))));
+      setPan(value => clampPan(value, next));
+      return next;
     });
   };
-
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    zoomBy(event.deltaY < 0 ? 0.12 : -0.12);
-  };
-
-  const startZonePointer = (event: React.PointerEvent<HTMLElement>, zone: Zone, mode: "move" | "resize") => {
-    event.preventDefault();
-    event.stopPropagation();
-    zonePointerRef.current = { id: zone.id, mode, pointerX: event.clientX, pointerY: event.clientY, x: zone.x, y: zone.y, width: zone.width, height: zone.height };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const moveZonePointer = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = zonePointerRef.current;
-    if (!drag) return;
-    const dx = (event.clientX - drag.pointerX) / (1600 * zoom) * 100;
-    const dy = (event.clientY - drag.pointerY) / (1000 * zoom) * 100;
-    setZones((current) => current.map((zone) => {
-      if (zone.id !== drag.id) return zone;
-      if (drag.mode === "move") return { ...zone, x: Math.max(0, Math.min(100 - zone.width, drag.x + dx)), y: Math.max(0, Math.min(100 - zone.height, drag.y + dy)) };
-      return { ...zone, width: Math.max(5, Math.min(100 - zone.x, drag.width + dx)), height: Math.max(5, Math.min(100 - zone.y, drag.height + dy)) };
-    }));
-  };
-
-  const stopZonePointer = () => { zonePointerRef.current = null; };
 
   const chooseResource = (resource: Resource) => {
     setSelectedId(resource.id);
@@ -608,6 +654,20 @@ function App() {
 
   return (
     <main className="atlas-app">
+      <header className="atlas-header">
+        <div className="brand-block">
+          <div className="brand-mark">G</div>
+
+          <div>
+            <div className="brand-title">
+              GALACTIC PRODUCTION ATLAS
+            </div>
+
+            <div className="brand-subtitle">
+              INDUSTRIAL NETWORK • RESOURCE INTELLIGENCE
+            </div>
+          </div>
+        </div>
 
         <div className="header-search">
           <span className="search-symbol">⌕</span>
@@ -673,9 +733,10 @@ function App() {
         </div>
 
 
+      </header>
 
       <div className="atlas-layout">
-        <aside className="factory-rail">
+        {showFactoryRail && <aside className="factory-rail">
           <div className="rail-heading">
             PRODUCTION SECTORS
           </div>
@@ -738,78 +799,91 @@ function App() {
             LOCAL DATABASE
             <small>Changes saved to this browser</small>
           </div>
-        </aside>
+        </aside>}
 
         <section className="map-section">
+          <div className="map-toolbar">
+            <div>
+              <div className="section-kicker">
+                GALACTIC INDUSTRIAL NETWORK
+              </div>
+
+              <div className="map-title">
+                {activeFactory === "All factories"
+                  ? "Manufacturing Blueprint"
+                  : activeFactory}
+              </div>
+            </div>
+
+            <div className="map-controls">
+              <button
+                onClick={() => zoomBy(-0.15)}
+                aria-label="Zoom out"
+              >
+                −
+              </button>
+
+              <span>{Math.round(zoom * 100)}%</span>
+
+              <button
+                onClick={() => zoomBy(0.15)}
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+
+              <button
+                onClick={() => {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                }}
+                title="Reset map view"
+              >
+                RESET
+              </button>
+            </div>
+          </div>
+
           {adminMode && (
             <div className="admin-banner">
-              <strong>ADMIN MODE</strong>
-
-              {selected
-                ? placingHotspot
-                  ? `Click the blueprint where "${selected.name}" belongs.`
-                  : `Selected: ${selected.name}. Choose "Place on map" to position its hotspot.`
-                : "Select a resource or create one to manage blueprint hotspots and data."}
-
-              {selected && !placingHotspot && (
-                <button
-                  onClick={() => setPlacingHotspot(true)}
-                >
-                  PLACE ON MAP
-                </button>
-              )}
-
-              {placingHotspot && (
-                <button
-                  onClick={() => setPlacingHotspot(false)}
-                >
-                  CANCEL
-                </button>
-              )}
-            </div>
-          )}
-
-          {adminMode && <button className="floating-zone-toggle" onClick={() => setShowZoneTools((value) => !value)} title="Show or hide zone tools">▦ ZONES</button>}
-          {adminMode && showZoneTools && (
-            <div className="zone-tools-panel">
-              <div className="zone-tools-heading">BLUEPRINT ZONES</div>
-              <p>Create named, resizable rectangles on the blueprint.</p>
-              <button onClick={() => setZones((current) => [...current, { id: `zone-${Date.now()}`, name: `New Zone ${current.length + 1}`, x: 50, y: 50, width: 24, height: 18 }])}>＋ ADD RECTANGLE</button>
-              {zones.map((zone) => <div className="zone-tool-row" key={zone.id}>
-                <input aria-label="Zone name" value={zone.name} onChange={(event) => setZones((current) => current.map((item) => item.id === zone.id ? { ...item, name: event.target.value } : item))} />
-                <button aria-label={`Delete ${zone.name}`} onClick={() => setZones((current) => current.filter((item) => item.id !== zone.id))}>×</button>
-              </div>)}
+              <strong>ADMIN MODE · ALT + K TO EXIT</strong>
+              <span>{selected ? `Selected: ${selected.name}` : "Select a resource, then place its hotspot."}</span>
+              {selected && !placingHotspot && <button onClick={() => setPlacingHotspot(true)}>PLACE HOTSPOT</button>}
+              {placingHotspot && <button onClick={() => setPlacingHotspot(false)}>CANCEL</button>}
             </div>
           )}
 
           <div
-            className={`map-viewport ${
-              placingHotspot ? "placing" : ""
-            }`}
+            className={`map-viewport ${placingHotspot ? "placing" : ""} ${drawingZone ? "drawing-zone" : ""}`}
             ref={viewportRef}
             onClick={handleMapClick}
-            onWheel={handleWheel}
-            onPointerDown={startPan}
-            onPointerMove={movePan}
-            onPointerUp={stopPan}
-            onPointerCancel={stopPan}
+            onWheel={onWheelZoom}
+            onPointerDown={(event) => { beginZoneDraw(event); startPan(event); }}
+            onPointerMove={(event) => { updateZonePointer(event); movePan(event); }}
+            onPointerUp={finishMapPointer}
+            onPointerCancel={finishMapPointer}
           >
             <div
               className="map-canvas"
               style={{
-                transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                width: `${mapSize.width}px`,
+                height: `${mapSize.height}px`,
+                transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${Math.max((viewportRef.current?.clientWidth || 1) / mapSize.width, (viewportRef.current?.clientHeight || 1) / mapSize.height) * zoom})`,
               }}
             >
               <img
+                ref={imageRef}
                 className="production-map-image"
                 src="/production-map.png"
                 alt="Galactic manufacturing production blueprint"
                 draggable={false}
-                onLoad={() => setMapImageFailed(false)}
-                onError={() => setMapImageFailed(true)}
+                onLoad={(event) => setMapSize({ width: event.currentTarget.naturalWidth || 1600, height: event.currentTarget.naturalHeight || 1000 })}
+                onError={(event) => {
+                  event.currentTarget.style.opacity = "0";
+                }}
               />
 
-              {mapImageFailed && <div className="map-image-fallback">
+              <div className="map-image-fallback">
                 <div className="fallback-grid" />
 
                 <div className="fallback-message">
@@ -834,12 +908,20 @@ function App() {
                     {factory}
                   </div>
                 ))}
-              </div>}
+              </div>
 
-              {zones.map((zone) => <div key={zone.id} className="blueprint-zone" onClick={(event) => event.stopPropagation()} onPointerMove={moveZonePointer} onPointerUp={stopZonePointer} onPointerCancel={stopZonePointer} style={{ left: `${zone.x}%`, top: `${zone.y}%`, width: `${zone.width}%`, height: `${zone.height}%` }}>
-                <span className="zone-drag-label" onPointerDown={(event) => startZonePointer(event, zone, "move")}>{zone.name}</span>
-                <button className="zone-resize-handle" aria-label={`Resize ${zone.name}`} onPointerDown={(event) => startZonePointer(event, zone, "resize")} />
-              </div>)}
+              {zones.map(zone => (
+                <div
+                  key={zone.id}
+                  className={`placement-zone ${zone.id === "draft" ? "draft" : ""}`}
+                  style={{ left: `${zone.x}%`, top: `${zone.y}%`, width: `${zone.width}%`, height: `${zone.height}%` }}
+                  onPointerDown={event => startZoneAdjust(event, zone, "move")}
+                  title="Drag to move this placement area"
+                >
+                  {adminMode && zone.id !== "draft" && <button className="zone-delete" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setZones(current => current.filter(item => item.id !== zone.id)); }}>×</button>}
+                  {adminMode && zone.id !== "draft" && <span className="zone-resize" onPointerDown={event => startZoneAdjust(event, zone, "resize")} />}
+                </div>
+              ))}
 
               {resources
                 .filter(
@@ -878,6 +960,20 @@ function App() {
                 ))}
             </div>
 
+            {adminMode && (
+              <div className="zone-tools-wrap">
+                <button className="zone-tools-toggle" onClick={() => setShowZoneTools(value => !value)} title="Placement area tools">▧ AREAS</button>
+                {showZoneTools && (
+                  <div className="zone-tools-panel">
+                    <strong>PLACEMENT AREAS</strong>
+                    <p>Draw a rectangle on the blueprint. Drag it to move; use its corner to resize.</p>
+                    <button onClick={() => { setDrawingZone(true); setPlacingHotspot(false); setShowZoneTools(false); }}>＋ DRAW AREA</button>
+                    <button onClick={() => setZones([])}>CLEAR ALL AREAS</button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="map-legend">
               <span>
                 <i className="legend-dot raw" /> RAW
@@ -901,7 +997,7 @@ function App() {
 
         </section>
 
-        <aside className="info-panel">
+        {showInfoPanel && <aside className="info-panel">
           {selected ? (
             <>
               <div className="panel-topline">
@@ -1319,7 +1415,12 @@ function App() {
               </label>
             </div>
           )}
-        </aside>
+        </aside>}
+      </div>
+
+      <div className="side-panel-toggles">
+        <button onClick={() => setShowFactoryRail(value => !value)} title="Toggle production directory">{showFactoryRail ? "‹" : "☰"}</button>
+        <button onClick={() => setShowInfoPanel(value => !value)} title="Toggle resource inspector">{showInfoPanel ? "›" : "▤"}</button>
       </div>
 
       {notice && (
