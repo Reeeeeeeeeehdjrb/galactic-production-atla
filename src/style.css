@@ -107,3 +107,79 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .placement-zone:not(.draft):hover { background: rgba(226,189,112,.12); }
 .map-viewport { overscroll-behavior: none; }
 .active-area-filter { position: absolute; z-index: 44; top: 76px; left: 50%; transform: translateX(-50%); padding: 8px 11px; border: 1px solid rgba(217,182,110,.45); border-radius: 4px; background: rgba(9,15,24,.94); color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; box-shadow: 0 5px 18px rgba(0,0,0,.3); }
+
+/* Resource hotspots are square hit areas. They are invisible to visitors and
+   outlined only while Admin Mode is active. */
+.hotspot-region {
+  position: absolute;
+  z-index: 7;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  box-sizing: border-box;
+}
+.hotspot-region.editing {
+  border: 1px dashed rgba(245, 211, 139, .95);
+  background: rgba(226, 189, 112, .09);
+  cursor: move;
+  min-width: 10px;
+  min-height: 10px;
+}
+.hotspot-region.editing.active {
+  border: 2px solid #f5d38b;
+  background: rgba(226, 189, 112, .16);
+}
+.hotspot-region-name {
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  color: #f5d38b;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.hotspot-region-resize {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #171b21;
+  border-radius: 2px;
+  background: #f5d38b;
+  cursor: nwse-resize;
+}
+.hotspot-region-delete {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #211;
+  border-radius: 50%;
+  background: #a94d47;
+  color: white;
+  line-height: 15px;
+  cursor: pointer;
+}
+.hotspot-region-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(8, 13, 21, .8);
+  color: #f0d18e;
+  font-size: 9px;
+  pointer-events: none;
+}
