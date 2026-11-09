@@ -1358,7 +1358,7 @@ function App() {
                 </div>
               )}
             </>
-          )
+          )}
 
           {adminMode && (
             <div className="admin-panel">
