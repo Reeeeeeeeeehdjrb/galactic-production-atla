@@ -196,8 +196,6 @@ function App() {
     try { return JSON.parse(localStorage.getItem("galactic-production-atlas-zones-v1") || "[]"); }
     catch { return []; }
   });
-  const [showFactoryRail, setShowFactoryRail] = useState(true);
-  const [showInfoPanel, setShowInfoPanel] = useState(true);
   const [mapSize, setMapSize] = useState({   width: 16349,   height: 12111, });
   const [notice, setNotice] = useState("");
 
@@ -842,71 +840,6 @@ function App() {
       </header>
 
       <div className="atlas-layout">
-        {showFactoryRail && <aside className="factory-rail">
-          <div className="rail-heading">
-            PRODUCTION SECTORS
-          </div>
-
-          <button
-            className={`factory-link ${
-              activeFactory === "All factories"
-                ? "selected"
-                : ""
-            }`}
-            onClick={() =>
-              setActiveFactory("All factories")
-            }
-          >
-            <span className="factory-icon">⌘</span>
-            <span>All resources</span>
-            <small>{resources.length}</small>
-          </button>
-
-          {FACTORIES.map((factory, index) => {
-            const count = resources.filter(
-              (resource) => resource.factory === factory
-            ).length;
-
-            return (
-              <button
-                key={factory}
-                className={`factory-link ${
-                  activeFactory === factory
-                    ? "selected"
-                    : ""
-                }`}
-                onClick={() => setActiveFactory(factory)}
-                title={factory}
-              >
-                <span className="factory-icon">
-                  {
-                    [
-                      "◈",
-                      "◇",
-                      "▦",
-                      "⌁",
-                      "◉",
-                      "⬡",
-                      "✧",
-                      "▣",
-                      "◌",
-                    ][index]
-                  }
-                </span>
-
-                <span>{factory}</span>
-                <small>{count}</small>
-              </button>
-            );
-          })}
-
-          <div className="rail-footer">
-            <div className="status-light" />
-            LOCAL DATABASE
-            <small>Changes saved to this browser</small>
-          </div>
-        </aside>}
-
         <section className="map-section">
           <div className="map-toolbar">
             <div>
@@ -1111,11 +1044,11 @@ function App() {
 
         </section>
 
-        {showInfoPanel && <aside className="info-panel">
+        {selected && <aside className="info-panel">
           {selected ? (
             <>
               <div className="panel-topline">
-                <span>RESOURCE INTELLIGENCE</span>
+                <span>DATAPAD</span>
 
                 <button
                   className="icon-button"
@@ -1425,38 +1358,7 @@ function App() {
                 </div>
               )}
             </>
-          ) : (
-            <div className="empty-panel">
-              <div className="empty-panel-icon">⌖</div>
-
-              <div className="section-kicker">
-                RESOURCE INSPECTOR
-              </div>
-
-              <h2>Select a blueprint item</h2>
-
-              <p>
-                Choose a hotspot on the manufacturing map or
-                search for a resource to inspect its production
-                data and connected supply chain.
-              </p>
-
-              <div className="inspector-tip">
-                <strong>TIP</strong> Search for a finished
-                product to trace its ingredients back to raw
-                materials.
-              </div>
-
-              {adminMode && (
-                <button
-                  className="primary-button"
-                  onClick={() => openEditor()}
-                >
-                  ＋ ADD RESOURCE
-                </button>
-              )}
-            </div>
-          )}
+          )
 
           {adminMode && (
             <div className="admin-panel">
@@ -1543,10 +1445,6 @@ function App() {
         </aside>}
       </div>
 
-      <div className="side-panel-toggles">
-        <button onClick={() => setShowFactoryRail(value => !value)} title="Toggle production directory">{showFactoryRail ? "‹" : "☰"}</button>
-        <button onClick={() => setShowInfoPanel(value => !value)} title="Toggle resource inspector">{showInfoPanel ? "›" : "▤"}</button>
-      </div>
 
       {notice && (
         <div className="toast-message">{notice}</div>
