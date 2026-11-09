@@ -55,8 +55,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fallback-message span { color: var(--gold); font-size: 10px; letter-spacing: .2em; }.fallback-message strong { color: #dce4ec; font: 700 25px 'Barlow Condensed',sans-serif; letter-spacing: .08em; }.fallback-message small { font-size: 11px; }
 .fallback-sector { position: absolute; padding: 12px 16px; border: 1px solid rgba(217,182,110,.25); background: rgba(10,18,29,.65); color: rgba(215,225,236,.55); font: 600 13px 'Barlow Condensed',sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 
-.map-legend { position: fixed; z-index: 12; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 17px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 6px; background: rgba(7,12,20,.83); color: #aab5c2; font-size: 9px; letter-spacing: .1em; backdrop-filter: blur(12px); pointer-events: none; }
-.map-legend span { display: flex; align-items: center; gap: 6px; }.legend-dot { width: 7px; height: 7px; display: inline-block; border-radius: 50%; }.legend-dot.raw { background: #c6a05e; }.legend-dot.refined { background: #64b7c5; }.legend-dot.component { background: #a68bd8; }.legend-dot.finished { background: #7bb68a; }
+
+
 .map-hint { position: fixed; right: 18px; bottom: 22px; z-index: 11; color: rgba(167,181,196,.58); font-size: 9px; letter-spacing: .12em; pointer-events: none; }
 .map-bottom-bar { display: none !important; }
 .admin-banner { position: fixed; z-index: 40; top: 78px; left: 50%; transform: translateX(-50%); width: min(620px,calc(100vw - 32px)); display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid rgba(217,182,110,.4); border-radius: 7px; background: rgba(15,19,25,.94); box-shadow: 0 8px 28px rgba(0,0,0,.35); font-size: 10px; color: #b7c0ca; }
