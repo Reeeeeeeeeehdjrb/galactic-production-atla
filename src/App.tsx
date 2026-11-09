@@ -139,7 +139,8 @@ function readSavedResources(): Resource[] {
 
     const parsed = JSON.parse(saved);
 
-    return Array.isArray(parsed) ? parsed : SEED;
+    // Keep one starter ore available if the last resource was accidentally deleted.
+    return Array.isArray(parsed) ? (parsed.length > 0 ? parsed : [SEED[0]]) : SEED;
   } catch {
     return SEED;
   }
