@@ -202,7 +202,6 @@ function App() {
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  const mapCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef<{ x: number; y: number } | null>(null);
   const zoneDragRef = useRef<{ id: string; mode: "move" | "resize"; startX: number; startY: number; zone: Zone } | null>(null);
   const hotspotDragRef = useRef<{ id: string; mode: "move" | "resize"; startX: number; startY: number; hotspot: Hotspot } | null>(null);
@@ -285,46 +284,6 @@ function App() {
 
     return () => window.clearTimeout(timer);
   }, [notice]);
-
-  // Render the huge blueprint into a viewport-sized high-DPI canvas. This avoids
-  // asking the browser to composite one near-maximum-size image texture.
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    const image = imageRef.current;
-    const canvas = mapCanvasRef.current;
-    if (!viewport || !image || !canvas || !image.complete || !image.naturalWidth) return;
-
-    const render = () => {
-      const bounds = viewport.getBoundingClientRect();
-      if (!bounds.width || !bounds.height) return;
-
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      const pixelWidth = Math.max(1, Math.round(bounds.width * pixelRatio));
-      const pixelHeight = Math.max(1, Math.round(bounds.height * pixelRatio));
-      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-        canvas.width = pixelWidth;
-        canvas.height = pixelHeight;
-      }
-
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      context.clearRect(0, 0, bounds.width, bounds.height);
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = "high";
-
-      const baseScale = Math.max(bounds.width / mapSize.width, bounds.height / mapSize.height);
-      const scale = baseScale * zoom;
-      const drawX = bounds.width / 2 + pan.x - (mapSize.width * scale) / 2;
-      const drawY = bounds.height / 2 + pan.y - (mapSize.height * scale) / 2;
-      context.drawImage(image, 0, 0, mapSize.width, mapSize.height, drawX, drawY, mapSize.width * scale, mapSize.height * scale);
-    };
-
-    render();
-    const observer = new ResizeObserver(render);
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, [mapSize, zoom, pan]);
 
   const resourceById = useMemo(
     () =>
@@ -1009,11 +968,6 @@ function App() {
             onPointerUp={finishMapPointer}
             onPointerCancel={finishMapPointer}
           >
-            <canvas
-              ref={mapCanvasRef}
-              className="production-map-renderer"
-              aria-hidden="true"
-            />
             <div
               className="map-canvas"
               style={{
