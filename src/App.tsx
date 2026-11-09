@@ -1052,8 +1052,9 @@ function App() {
 
         </section>
 
-        {selected && <aside className="info-panel">
-          <>
+        {(selected || adminMode) && <aside className="info-panel">
+          {selected && (
+            <>
               <div className="panel-topline">
                 <span>DATAPAD</span>
 
@@ -1365,6 +1366,7 @@ function App() {
                 </div>
               )}
             </>
+          )}
 
           {adminMode && (
             <div className="admin-panel">
