@@ -469,7 +469,7 @@ function App() {
       value.ingredients
         .map(
           (ingredient) =>
-            `${ingredient.resourceId}:${ingredient.quantity}`
+            `${ingredient.resourceId}`
         )
         .join("\n")
     );
@@ -489,16 +489,11 @@ function App() {
       .map((part) => part.trim())
       .filter(Boolean)
       .map((part) => {
-        const [resourceId, rawQuantity] = part
-          .split(":")
-          .map((value) => value.trim());
+        const resourceId = part.split(":")[0].trim();
 
         return {
           resourceId,
-          quantity: Math.max(
-            0.001,
-            Number(rawQuantity) || 1
-          ),
+          quantity: 1,
         };
       })
       .filter(
@@ -1326,7 +1321,6 @@ function App() {
 
                         <span>{resource.name}</span>
                         <small>{resource.kind}</small>
-                        <b>OPEN</b>
                       </button>
                     ))
                   )}
@@ -1592,7 +1586,7 @@ function App() {
 
               <label className="editor-field full">
                 <span>
-                  INGREDIENTS (one per line: resource-id:quantity)
+                  INGREDIENTS (one resource ID per line)
                 </span>
 
                 <textarea
@@ -1602,7 +1596,7 @@ function App() {
                     setIngredientText(event.target.value)
                   }
                   placeholder={
-                    "example-ore:2\nexample-metal:3"
+                    "example-ore\nexample-metal"
                   }
                 />
 
