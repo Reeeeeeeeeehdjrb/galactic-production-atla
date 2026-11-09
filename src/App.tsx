@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "./supabase";
 import "./style.css";
 
 type Kind =
@@ -181,6 +182,14 @@ function App() {
     useState<"details" | "chain" | "usedBy">("details");
 
   const [adminMode, setAdminMode] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [isAtlasAdmin, setIsAtlasAdmin] = useState(false);
+  const [remoteReady, setRemoteReady] = useState(false);
+  const syncedDataRef = useRef<string | null>(null);
+  const syncingRef = useRef(false);
   const [editing, setEditing] = useState<Resource | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [ingredientText, setIngredientText] = useState("");
@@ -215,25 +224,119 @@ function App() {
   } | null>(null);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(resources)
-      );
-    } catch {
-      setNotice("Could not save changes in this browser.");
-    }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(resources)); }
+    catch { setNotice("Could not save changes in this browser."); }
   }, [resources]);
-
   useEffect(() => {
     try { localStorage.setItem("galactic-production-atlas-zones-v1", JSON.stringify(zones)); }
     catch { setNotice("Could not save placement areas."); }
   }, [zones]);
-
   useEffect(() => {
     try { localStorage.setItem("galactic-production-atlas-hotspots-v2", JSON.stringify(hotspots)); }
     catch { setNotice("Could not save map hotspots."); }
   }, [hotspots]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSharedAtlas = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        let authorized = false;
+        if (sessionData.session?.user) {
+          const { data, error } = await supabase.rpc("is_atlas_admin");
+          authorized = !error && data === true;
+        }
+        const [rr, hr, zr] = await Promise.all([
+          supabase.from("resources").select("id,data"),
+          supabase.from("hotspots").select("id,data"),
+          supabase.from("zones").select("id,data"),
+        ]);
+        const loadError = rr.error || hr.error || zr.error;
+        if (loadError) throw loadError;
+        if (cancelled) return;
+        const remoteResources = (rr.data || []).map(row => row.data as Resource);
+        const remoteHotspots = (hr.data || []).map(row => row.data as Hotspot);
+        const remoteZones = (zr.data || []).map(row => row.data as Zone);
+        const hasSharedData = remoteResources.length + remoteHotspots.length + remoteZones.length > 0;
+        if (hasSharedData) {
+          setResources(remoteResources);
+          setHotspots(remoteHotspots);
+          setZones(remoteZones);
+          syncedDataRef.current = JSON.stringify({ resources: remoteResources, hotspots: remoteHotspots, zones: remoteZones });
+        } else {
+          syncedDataRef.current = JSON.stringify({ resources, hotspots, zones });
+        }
+        setIsAtlasAdmin(authorized);
+        setRemoteReady(true);
+        setNotice(hasSharedData ? "Connected to the shared atlas." : "Shared database ready. Sign in and import your backup to publish your atlas.");
+      } catch (error) {
+        console.error("Supabase load failed:", error);
+        if (!cancelled) {
+          syncedDataRef.current = JSON.stringify({ resources, hotspots, zones });
+          setRemoteReady(true);
+          setNotice("Could not connect to the shared database. Check deployment environment settings.");
+        }
+      }
+    };
+    loadSharedAtlas();
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session) { setIsAtlasAdmin(false); setAdminMode(false); return; }
+      const { data, error } = await supabase.rpc("is_atlas_admin");
+      const allowed = !error && data === true;
+      setIsAtlasAdmin(allowed);
+      if (!allowed) { setAdminMode(false); setNotice("This account does not have atlas administrator access."); }
+    });
+    return () => { cancelled = true; authListener.subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!remoteReady || !isAtlasAdmin || !syncedDataRef.current || syncingRef.current) return;
+    const snapshot = { resources, hotspots, zones };
+    const serialized = JSON.stringify(snapshot);
+    if (serialized === syncedDataRef.current) return;
+    let cancelled = false;
+    const publish = async () => {
+      syncingRef.current = true;
+      try {
+        for (const [table, rows] of [["resources", resources], ["hotspots", hotspots], ["zones", zones]] as const) {
+          const { error: clearError } = await supabase.from(table).delete().neq("id", "");
+          if (clearError) throw clearError;
+          if (rows.length) {
+            const { error: writeError } = await supabase.from(table).upsert(rows.map(item => ({ id: item.id, data: item })));
+            if (writeError) throw writeError;
+          }
+        }
+        if (!cancelled) { syncedDataRef.current = serialized; setNotice("Changes published to the shared atlas."); }
+      } catch (error) {
+        console.error("Supabase sync failed:", error);
+        if (!cancelled) setNotice("Could not publish changes. Check administrator access and database policies.");
+      } finally { syncingRef.current = false; }
+    };
+    publish();
+    return () => { cancelled = true; };
+  }, [resources, hotspots, zones, isAtlasAdmin, remoteReady]);
+
+  const signInAsAtlasAdmin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (authBusy) return;
+    setAuthBusy(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
+    setAuthBusy(false);
+    if (error || !data.user) { setNotice(error?.message || "Administrator sign-in failed."); return; }
+    const { data: allowed, error: permissionError } = await supabase.rpc("is_atlas_admin");
+    if (permissionError || allowed !== true) {
+      await supabase.auth.signOut();
+      setNotice("This account is not registered as an atlas administrator.");
+      return;
+    }
+    setIsAtlasAdmin(true); setAdminMode(true); setLoginOpen(false); setAuthPassword("");
+    setNotice("Administrator access granted.");
+  };
+  const signOutAtlasAdmin = async () => {
+    await supabase.auth.signOut();
+    setIsAtlasAdmin(false); setAdminMode(false);
+    setNotice("Signed out of administrator mode.");
+  };
 
   // Areas are real map groups: hotspots inside an area are assigned to it automatically.
   useEffect(() => {
@@ -258,6 +361,7 @@ function App() {
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.altKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        if (!isAtlasAdmin) { setLoginOpen(true); return; }
         setAdminMode(value => !value);
         setPlacingHotspot(false);
         setDrawingZone(false);
@@ -266,7 +370,7 @@ function App() {
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, []);
+  }, [isAtlasAdmin]);
 
   useEffect(() => {
     const handleResize = () => setPan(current => clampPan(current));
@@ -524,7 +628,7 @@ function App() {
     setSelectedId(saved.id);
     setEditing(null);
     setIsCreating(false);
-    setNotice("Resource saved in this browser.");
+    setNotice("Resource saved. Publishing to the shared atlas...");
   };
 
   const deleteResource = (resource: Resource) => {
@@ -1351,9 +1455,8 @@ function App() {
 
           {adminMode && (
             <div className="admin-panel">
-              <div className="admin-panel-heading">
-                DATABASE TOOLS
-              </div>
+              <div className="admin-panel-heading">DATABASE TOOLS · SHARED</div>
+              <button onClick={signOutAtlasAdmin}>SIGN OUT ADMINISTRATOR</button>
 
               <button onClick={() => openEditor()}>
                 ＋ CREATE RESOURCE
@@ -1416,7 +1519,7 @@ function App() {
                         }
                         setActiveZoneId(null);
                         setSelectedId(null);
-                        setNotice("Database, hotspots, and areas imported.");
+                        setNotice("Database imported. Publishing to the shared atlas...");
                       } catch {
                         setNotice(
                           "Invalid database file."
@@ -1434,6 +1537,26 @@ function App() {
         </aside>}
       </div>
 
+
+      {loginOpen && (
+        <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setLoginOpen(false); }}>
+          <form className="editor-modal admin-login-modal" onSubmit={signInAsAtlasAdmin}>
+            <div className="modal-header">
+              <div><div className="section-kicker">GALACTIC PRODUCTION ATLAS</div><h2>Administrator sign in</h2></div>
+              <button type="button" className="icon-button" onClick={() => setLoginOpen(false)} aria-label="Close">×</button>
+            </div>
+            <p className="login-description">Sign in with the administrator account registered for this atlas.</p>
+            <div className="editor-grid">
+              <label className="editor-field full"><span>EMAIL</span><input type="email" autoComplete="username" required value={authEmail} onChange={event => setAuthEmail(event.target.value)} /></label>
+              <label className="editor-field full"><span>PASSWORD</span><input type="password" autoComplete="current-password" required value={authPassword} onChange={event => setAuthPassword(event.target.value)} /></label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setLoginOpen(false)}>CANCEL</button>
+              <button type="submit" className="primary-button" disabled={authBusy}>{authBusy ? "SIGNING IN..." : "SIGN IN"}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {notice && (
         <div className="toast-message">{notice}</div>
