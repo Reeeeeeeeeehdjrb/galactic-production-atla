@@ -604,7 +604,7 @@ function App() {
 
   const onWheelZoom = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const nextZoom = Math.max(1, Math.min(4, zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    const nextZoom = Math.max(1, Math.min(10, zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
     if (nextZoom === zoom) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const cursor = { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 };
@@ -738,7 +738,7 @@ function App() {
 
   const zoomBy = (amount: number) => {
     setZoom(current => {
-      const next = Math.max(1, Math.min(4, Number((current + amount).toFixed(2))));
+      const next = Math.max(1, Math.min(10, Number((current + amount).toFixed(2))));
       setPan(value => clampPan(value, next));
       return next;
     });
