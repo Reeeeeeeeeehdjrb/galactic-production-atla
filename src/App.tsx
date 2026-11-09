@@ -979,20 +979,19 @@ function App() {
               <img
   ref={imageRef}
   className="production-map-image"
-  src="/production-map.png?v=20261109"
+  src="/production-map.png?v=2"
   alt="Galactic manufacturing production blueprint"
   draggable={false}
   onLoad={(event) => {
-    const image = event.currentTarget;
-
+    const img = event.currentTarget;
     setMapSize({
-      width: image.naturalWidth,
-      height: image.naturalHeight,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
     });
+    img.style.opacity = "1";
   }}
-  onError={(event) => {
-    event.currentTarget.style.opacity = "0";
-    console.error("Could not load production-map.png");
+  onError={() => {
+    console.error("Failed to load the high-resolution production map.");
   }}
 />
 
