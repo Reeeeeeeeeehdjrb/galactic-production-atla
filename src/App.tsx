@@ -279,12 +279,13 @@ function App() {
       }
     };
     loadSharedAtlas();
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!session) { setIsAtlasAdmin(false); setAdminMode(false); return; }
-      const { data, error } = await supabase.rpc("is_atlas_admin");
-      const allowed = !error && data === true;
-      setIsAtlasAdmin(allowed);
-      if (!allowed) { setAdminMode(false); setNotice("This account does not have atlas administrator access."); }
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        setIsAtlasAdmin(false);
+        setAdminMode(false);
+      }
+      // Admin authorization is checked explicitly after sign-in and during initial load.
+      // Avoid making another Supabase request inside this auth callback.
     });
     return () => { cancelled = true; authListener.subscription.unsubscribe(); };
   }, []);
