@@ -1287,49 +1287,44 @@ function App() {
                       No products currently list this resource as an ingredient.
                     </div>
                   ) : (
-                    directOutputs.map((resource) => (
-                      <button
-                        className="chain-row"
-                        key={resource.id}
-                        onClick={() =>
-                          chooseResource(resource)
-                        }
-                      >
-                        <span className="chain-quantity">
-                          ↗
-                        </span>
-
-                        <span>{resource.name}</span>
-                        <small>{resource.kind}</small>
-                      </button>
-                    ))
+                    <div className="chain-list">
+                      {directOutputs.map((resource) => (
+                        <button
+                          className="chain-row ingredient-row"
+                          key={resource.id}
+                          onClick={() =>
+                            chooseResource(resource)
+                          }
+                        >
+                          <span>{resource.name}</span>
+                          <small>{resource.kind}</small>
+                          <b>↗</b>
+                        </button>
+                      ))}
+                    </div>
                   )}
 
                   {descendants.length > 0 && (
                     <>
                       <div className="chain-subheading">
-                        ALL DOWNSTREAM PRODUCTS
+                        FULL DOWNSTREAM REQUIREMENTS
                       </div>
 
-                      {descendants.map(
-                        ({ resource, depth }) => (
+                      <div className="chain-list">
+                        {descendants.map(({ resource }) => (
                           <button
-                            className="chain-row nested"
+                            className="chain-row ingredient-row"
                             key={resource.id}
                             onClick={() =>
                               chooseResource(resource)
                             }
                           >
-                            <span className="chain-depth">
-                              {depth}
-                            </span>
-
                             <span>{resource.name}</span>
                             <small>{resource.kind}</small>
                             <b>↗</b>
                           </button>
-                        )
-                      )}
+                        ))}
+                      </div>
                     </>
                   )}
                 </div>
