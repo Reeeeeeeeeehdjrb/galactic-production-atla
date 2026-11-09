@@ -180,3 +180,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font-size: 9px;
   pointer-events: none;
 }
+
+.admin-login-modal { max-width: 480px; }
+.login-description { margin: -6px 0 18px; color: #9ba8b6; font-size: 11px; line-height: 1.6; }
