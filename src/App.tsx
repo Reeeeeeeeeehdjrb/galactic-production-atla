@@ -1231,10 +1231,6 @@ function App() {
                               }
                               disabled={!resource}
                             >
-                              <span className="chain-quantity">
-                                ×{ingredient.quantity}
-                              </span>
-
                               <span>
                                 {resource?.name ??
                                   `Missing: ${ingredient.resourceId}`}
