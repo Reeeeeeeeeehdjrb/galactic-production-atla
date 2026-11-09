@@ -1209,71 +1209,33 @@ function App() {
                     <strong>{selected.name}</strong>
                   </div>
 
-                  {selected.ingredients.length === 0 ? (
+                  {ancestors.length === 0 ? (
                     <div className="chain-empty">
                       This resource has no recorded inputs. It may be a raw material or its recipe has not been added.
                     </div>
                   ) : (
-                    <div className="chain-list">
-                      {selected.ingredients.map(
-                        (ingredient) => {
-                          const resource = resourceById.get(
-                            ingredient.resourceId
-                          );
-
-                          return (
-                            <button
-                              className="chain-row ingredient-row"
-                              key={ingredient.resourceId}
-                              onClick={() =>
-                                resource &&
-                                chooseResource(resource)
-                              }
-                              disabled={!resource}
-                            >
-                              <span>
-                                {resource?.name ??
-                                  `Missing: ${ingredient.resourceId}`}
-                              </span>
-
-                              <small>
-                                {resource?.kind ??
-                                  "Unknown resource"}
-                              </small>
-
-                              <b>↗</b>
-                            </button>
-                          );
-                        }
-                      )}
-                    </div>
-                  )}
-
-                  {ancestors.length > 0 && (
                     <>
                       <div className="chain-subheading">
                         FULL UPSTREAM REQUIREMENTS
                       </div>
 
-                      {ancestors.map(
-                        ({ resource, depth, quantity }) => (
-                          <button
-                            className="chain-row nested"
-                            key={resource.id}
-                            onClick={() =>
-                              chooseResource(resource)
-                            }
-                          >
-                            <span className="chain-depth">
-                              {depth}
-                            </span>
-
-                            <span>{resource.name}</span>
-                            <small>{resource.kind}</small>
-                            <b>↗</b>
-                          </button>
-                        )
-                      )}
+                      <div className="chain-list">
+                        {ancestors.map(
+                          ({ resource }) => (
+                            <button
+                              className="chain-row ingredient-row"
+                              key={resource.id}
+                              onClick={() =>
+                                chooseResource(resource)
+                              }
+                            >
+                              <span>{resource.name}</span>
+                              <small>{resource.kind}</small>
+                              <b>↗</b>
+                            </button>
+                          )
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
