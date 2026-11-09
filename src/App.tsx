@@ -197,7 +197,7 @@ function App() {
   });
   const [showFactoryRail, setShowFactoryRail] = useState(true);
   const [showInfoPanel, setShowInfoPanel] = useState(true);
-  const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
+  const [mapSize, setMapSize] = useState({   width: 16349,   height: 12111, });
   const [notice, setNotice] = useState("");
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -977,20 +977,24 @@ function App() {
               }}
             >
               <img
-                ref={imageRef}
-                className="production-map-image"
-                src={zoom >= 1.45 ? "/production-map-detail.png" : "/production-map.png"}
-                alt="Galactic manufacturing production blueprint"
-                draggable={false}
-                onLoad={(event) => setMapSize({ width: event.currentTarget.naturalWidth || 1600, height: event.currentTarget.naturalHeight || 1000 })}
-                onError={(event) => {
-                  if (event.currentTarget.src.includes("production-map-detail.png")) {
-                    event.currentTarget.src = "/production-map.png";
-                  } else {
-                    event.currentTarget.style.opacity = "0";
-                  }
-                }}
-              />
+  ref={imageRef}
+  className="production-map-image"
+  src="/production-map.png?v=20261109"
+  alt="Galactic manufacturing production blueprint"
+  draggable={false}
+  onLoad={(event) => {
+    const image = event.currentTarget;
+
+    setMapSize({
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    });
+  }}
+  onError={(event) => {
+    event.currentTarget.style.opacity = "0";
+    console.error("Could not load production-map.png");
+  }}
+/>
 
               <div className="map-image-fallback">
                 <div className="fallback-grid" />
