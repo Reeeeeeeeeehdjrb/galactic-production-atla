@@ -743,9 +743,32 @@ function App() {
     });
   };
 
-  const chooseResource = (resource: Resource) => {
+  const chooseResource = (resource: Resource, focusFinishedProduct = false) => {
     setSelectedId(resource.id);
     setActiveTab("details");
+
+    if (focusFinishedProduct && resource.kind === "Finished product") {
+      const resourceHotspots = hotspots.filter(hotspot => hotspot.resourceId === resource.id);
+      if (resourceHotspots.length === 1) {
+        const hotspot = resourceHotspots[0];
+        const viewport = viewportRef.current;
+        if (viewport) {
+          setActiveZoneId(null);
+          const bounds = viewport.getBoundingClientRect();
+          const baseScale = Math.max(bounds.width / mapSize.width, bounds.height / mapSize.height);
+          const targetZoom = 3;
+          const scale = baseScale * targetZoom;
+          const hotspotX = ((hotspot.x + hotspot.width / 2) / 100) * mapSize.width;
+          const hotspotY = ((hotspot.y + (hotspot.width * mapSize.width / mapSize.height) / 2) / 100) * mapSize.height;
+          const nextPan = {
+            x: (mapSize.width / 2 - hotspotX) * scale,
+            y: (mapSize.height / 2 - hotspotY) * scale,
+          };
+          setZoom(targetZoom);
+          setPan(clampPan(nextPan, targetZoom));
+        }
+      }
+    }
   };
 
   const ancestors = selected
@@ -808,7 +831,7 @@ function App() {
                   <button
                     className="search-result"
                     key={resource.id}
-                    onClick={() => chooseResource(resource)}
+                    onClick={() => chooseResource(resource, true)}
                   >
                     <span
                       className={`kind-dot kind-${resource.kind
@@ -1020,21 +1043,6 @@ function App() {
                 )}
               </div>
             )}
-
-            <div className="map-legend">
-              <span>
-                <i className="legend-dot raw" /> RAW
-              </span>
-              <span>
-                <i className="legend-dot refined" /> REFINED
-              </span>
-              <span>
-                <i className="legend-dot component" /> COMPONENT
-              </span>
-              <span>
-                <i className="legend-dot finished" /> FINISHED
-              </span>
-            </div>
 
             <div className="map-hint">
               DRAG TO PAN · SCROLL TO ZOOM · SELECT A HOTSPOT
