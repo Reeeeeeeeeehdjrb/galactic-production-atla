@@ -1223,7 +1223,7 @@ function App() {
 
                           return (
                             <button
-                              className="chain-row"
+                              className="chain-row ingredient-row"
                               key={ingredient.resourceId}
                               onClick={() =>
                                 resource &&
