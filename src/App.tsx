@@ -34,7 +34,8 @@ type Resource = {
 };
 
 const FACTORIES = [
-  "Raw and Refined Materials",
+  "Mine",
+  "Refinery",
   "Alloy Factory",
   "Component Factory",
   "Weapons Factory",
