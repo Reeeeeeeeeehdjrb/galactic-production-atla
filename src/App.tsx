@@ -855,18 +855,6 @@ function App() {
           )}
         </div>
 
-        <button
-          className={`admin-access-toggle ${adminMode ? "active" : ""}`}
-          onClick={() => {
-            setAdminMode(value => !value);
-            setPlacingHotspot(false);
-            setDrawingZone(false);
-            setShowZoneTools(false);
-          }}
-          title="Toggle Admin Mode"
-        >
-          {adminMode ? "EXIT ADMIN" : "ADMIN ACCESS"}
-        </button>
       </header>
 
       <div className="atlas-layout">
