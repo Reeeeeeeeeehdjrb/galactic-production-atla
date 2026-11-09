@@ -1197,43 +1197,47 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="detail-grid">
-                    <div className="detail-group">
-                      <label>LOCATION</label>
-                      <div>
-                        {selected.location || "Unknown"}
-                      </div>
-                    </div>
+                  {(selected.location?.trim() ||
+                    selected.supplier?.trim() ||
+                    selected.owner?.trim() ||
+                    selected.acquisition?.trim()) && (
+                    <div className="detail-grid">
+                      {selected.location?.trim() && (
+                        <div className="detail-group">
+                          <label>LOCATION</label>
+                          <div>{selected.location}</div>
+                        </div>
+                      )}
 
-                    <div className="detail-group">
-                      <label>SUPPLIER</label>
-                      <div>
-                        {selected.supplier || "Unknown"}
-                      </div>
-                    </div>
+                      {selected.supplier?.trim() && (
+                        <div className="detail-group">
+                          <label>SUPPLIER</label>
+                          <div>{selected.supplier}</div>
+                        </div>
+                      )}
 
-                    <div className="detail-group">
-                      <label>OWNER</label>
-                      <div>
-                        {selected.owner || "Unknown"}
-                      </div>
-                    </div>
+                      {selected.owner?.trim() && (
+                        <div className="detail-group">
+                          <label>OWNER</label>
+                          <div>{selected.owner}</div>
+                        </div>
+                      )}
 
-                    <div className="detail-group">
-                      <label>ACQUISITION</label>
-                      <div>
-                        {selected.acquisition ||
-                          "Not specified"}
-                      </div>
+                      {selected.acquisition?.trim() && (
+                        <div className="detail-group">
+                          <label>ACQUISITION</label>
+                          <div>{selected.acquisition}</div>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
 
-                  <div className="detail-group">
-                    <label>NOTES</label>
-                    <div>
-                      {selected.notes || "No additional notes."}
+                  {selected.notes?.trim() && (
+                    <div className="detail-group">
+                      <label>NOTES</label>
+                      <div>{selected.notes}</div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="quick-chain">
                     <div className="quick-chain-heading">
