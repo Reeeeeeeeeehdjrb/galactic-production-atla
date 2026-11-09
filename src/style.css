@@ -47,7 +47,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .map-viewport:active { cursor: grabbing; }
 .map-viewport.placing { cursor: crosshair; }
 .map-viewport.drawing-zone { cursor: crosshair; }
-.map-canvas { position: absolute; left: 50%; top: 50%; transform-origin: center center; will-change: transform; user-select: none; }
+.map-canvas { position: absolute; left: 50%; top: 50%; transform-origin: center center; user-select: none; }
 .production-map-image { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; user-select: none; }
 .map-image-fallback { display: none; position: absolute; inset: 0; overflow: hidden; background: linear-gradient(135deg,#0d1723,#111d2b 50%,#0a121d); border: 1px solid rgba(117,148,178,.35); }
 .fallback-grid { position: absolute; inset: 0; opacity: .55; background-image: linear-gradient(rgba(119,154,184,.09) 1px, transparent 1px), linear-gradient(90deg,rgba(119,154,184,.09) 1px, transparent 1px); background-size: 40px 40px; }
