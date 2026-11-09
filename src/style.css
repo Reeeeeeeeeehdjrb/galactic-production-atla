@@ -179,7 +179,3 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font-size: 9px;
   pointer-events: none;
 }
-
-
-  z-index: 1;
-}
