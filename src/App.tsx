@@ -811,10 +811,11 @@ function App() {
         setZones(current => current.filter(zone => zone.id !== "draft"));
       }
     }
+    const wasPanning = dragRef.current !== null;
     zoneDragRef.current = null;
     hotspotDragRef.current = null;
     dragRef.current = null;
-    setPan(panRef.current);
+    if (wasPanning) setPan(panRef.current);
   };
 
   const startHotspotAdjust = (event: React.PointerEvent, hotspot: Hotspot, mode: "move" | "resize") => {
