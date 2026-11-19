@@ -667,7 +667,7 @@ function App() {
     const canvas = mapCanvasRef.current;
     if (!viewport || !canvas) return;
     const baseScale = Math.max(viewport.clientWidth / mapSize.width, viewport.clientHeight / mapSize.height);
-    canvas.style.transform = `translate3d(-50%, -50%, 0) translate3d(${nextPan.x}px, ${nextPan.y}px, 0) scale(${baseScale * nextZoom})`;
+    canvas.style.transform = `translate(-50%, -50%) translate(${nextPan.x}px, ${nextPan.y}px) scale(${baseScale * nextZoom})`;
   };
 
   useEffect(() => {
@@ -1068,7 +1068,7 @@ function App() {
               style={{
                 width: `${mapSize.width}px`,
                 height: `${mapSize.height}px`,
-                transform: `translate3d(-50%, -50%, 0) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${Math.max((viewportRef.current?.clientWidth || 1) / mapSize.width, (viewportRef.current?.clientHeight || 1) / mapSize.height) * zoom})`,
+                transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${Math.max((viewportRef.current?.clientWidth || 1) / mapSize.width, (viewportRef.current?.clientHeight || 1) / mapSize.height) * zoom})`,
               }}
             >
               <img
