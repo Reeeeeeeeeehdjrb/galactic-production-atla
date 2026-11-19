@@ -210,7 +210,11 @@ function App() {
   const [notice, setNotice] = useState("");
 
   const viewportRef = useRef<HTMLDivElement>(null);
+  const mapCanvasRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+  const viewCommitTimerRef = useRef<number | null>(null);
   const drawingRef = useRef<{ x: number; y: number } | null>(null);
   const zoneDragRef = useRef<{ id: string; mode: "move" | "resize"; startX: number; startY: number; zone: Zone } | null>(null);
   const hotspotDragRef = useRef<{ id: string; mode: "move" | "resize"; startX: number; startY: number; hotspot: Hotspot } | null>(null);
@@ -658,6 +662,24 @@ function App() {
     setNotice("Resource deleted.");
   };
 
+  const applyMapTransform = (nextPan = panRef.current, nextZoom = zoomRef.current) => {
+    const viewport = viewportRef.current;
+    const canvas = mapCanvasRef.current;
+    if (!viewport || !canvas) return;
+    const baseScale = Math.max(viewport.clientWidth / mapSize.width, viewport.clientHeight / mapSize.height);
+    canvas.style.transform = `translate3d(-50%, -50%, 0) translate3d(${nextPan.x}px, ${nextPan.y}px, 0) scale(${baseScale * nextZoom})`;
+  };
+
+  useEffect(() => {
+    panRef.current = pan;
+    zoomRef.current = zoom;
+    applyMapTransform(pan, zoom);
+  }, [pan, zoom, mapSize]);
+
+  useEffect(() => () => {
+    if (viewCommitTimerRef.current !== null) window.clearTimeout(viewCommitTimerRef.current);
+  }, []);
+
   const getMapPoint = (clientX: number, clientY: number) => {
     const viewport = viewportRef.current;
     if (!viewport) return { x: 50, y: 50 };
@@ -704,14 +726,23 @@ function App() {
 
   const onWheelZoom = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const nextZoom = Math.max(1, Math.min(10, zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
-    if (nextZoom === zoom) return;
+    const currentZoom = zoomRef.current;
+    const nextZoom = Math.max(1, Math.min(10, currentZoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    if (nextZoom === currentZoom) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const cursor = { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 };
-    const ratio = nextZoom / zoom;
-    const nextPan = { x: cursor.x - (cursor.x - pan.x) * ratio, y: cursor.y - (cursor.y - pan.y) * ratio };
-    setPan(clampPan(nextPan, nextZoom));
-    setZoom(nextZoom);
+    const currentPan = panRef.current;
+    const ratio = nextZoom / currentZoom;
+    const nextPan = clampPan({ x: cursor.x - (cursor.x - currentPan.x) * ratio, y: cursor.y - (cursor.y - currentPan.y) * ratio }, nextZoom);
+    zoomRef.current = nextZoom;
+    panRef.current = nextPan;
+    applyMapTransform(nextPan, nextZoom);
+    if (viewCommitTimerRef.current !== null) window.clearTimeout(viewCommitTimerRef.current);
+    viewCommitTimerRef.current = window.setTimeout(() => {
+      setZoom(nextZoom);
+      setPan(nextPan);
+      viewCommitTimerRef.current = null;
+    }, 90);
   };
 
   const beginZoneDraw = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -783,6 +814,7 @@ function App() {
     zoneDragRef.current = null;
     hotspotDragRef.current = null;
     dragRef.current = null;
+    setPan(panRef.current);
   };
 
   const startHotspotAdjust = (event: React.PointerEvent, hotspot: Hotspot, mode: "move" | "resize") => {
@@ -816,8 +848,8 @@ function App() {
     dragRef.current = {
       x: event.clientX,
       y: event.clientY,
-      panX: pan.x,
-      panY: pan.y,
+      panX: panRef.current.x,
+      panY: panRef.current.y,
     };
 
     event.currentTarget.setPointerCapture(
@@ -830,18 +862,22 @@ function App() {
   ) => {
     if (!dragRef.current) return;
 
-    setPan(clampPan({
+    const nextPan = clampPan({
       x: dragRef.current.panX + event.clientX - dragRef.current.x,
       y: dragRef.current.panY + event.clientY - dragRef.current.y,
-    }));
+    });
+    panRef.current = nextPan;
+    applyMapTransform(nextPan, zoomRef.current);
   };
 
   const zoomBy = (amount: number) => {
-    setZoom(current => {
-      const next = Math.max(1, Math.min(10, Number((current + amount).toFixed(2))));
-      setPan(value => clampPan(value, next));
-      return next;
-    });
+    const nextZoom = Math.max(1, Math.min(10, Number((zoomRef.current + amount).toFixed(2))));
+    const nextPan = clampPan(panRef.current, nextZoom);
+    zoomRef.current = nextZoom;
+    panRef.current = nextPan;
+    applyMapTransform(nextPan, nextZoom);
+    setZoom(nextZoom);
+    setPan(nextPan);
   };
 
   const chooseResource = (resource: Resource, focusFinishedProduct = false) => {
@@ -1026,11 +1062,12 @@ function App() {
             onPointerCancel={finishMapPointer}
           >
             <div
+              ref={mapCanvasRef}
               className="map-canvas"
               style={{
                 width: `${mapSize.width}px`,
                 height: `${mapSize.height}px`,
-                transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${Math.max((viewportRef.current?.clientWidth || 1) / mapSize.width, (viewportRef.current?.clientHeight || 1) / mapSize.height) * zoom})`,
+                transform: `translate3d(-50%, -50%, 0) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${Math.max((viewportRef.current?.clientWidth || 1) / mapSize.width, (viewportRef.current?.clientHeight || 1) / mapSize.height) * zoom})`,
               }}
             >
               <img
@@ -1101,8 +1138,7 @@ function App() {
               {renderHotspots.map((marker) => {
                 const resource = resourceById.get(marker.resourceId);
                 if (!resource) return null;
-                const hotspot = hotspots.find(item => item.id === marker.id);
-                if (!hotspot) return null;
+                const hotspot = marker;
                 return (
                   <div
                     className={`hotspot-region ${adminMode ? "editing" : ""} ${selectedId === resource.id ? "active" : ""}`}
